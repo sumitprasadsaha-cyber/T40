@@ -1716,7 +1716,19 @@ export function StudentMyTab({
     setEditingRemarkId(null);
   };
 
+  const currentTabServiceStatus = (localStudent.serviceStatus || localStudent.service_status || "active").toLowerCase();
+
   const handlePreviewPdf = (note: ChapterNote) => {
+    if (!isAdmin) {
+      if (currentTabServiceStatus === "paused") {
+        alert("Your learning services are temporarily paused. Please contact the academy for assistance.");
+        return;
+      }
+      if (currentTabServiceStatus === "ended") {
+        alert("Your academy services have ended. Please contact the administrator if you believe this is an error.");
+        return;
+      }
+    }
     if (!note.pdfUrl) return;
     let url = note.pdfUrl;
     let storagePath = note.storagePath;
@@ -1744,6 +1756,16 @@ export function StudentMyTab({
   };
 
   const handleDownloadPdf = async (note: ChapterNote) => {
+    if (!isAdmin) {
+      if (currentTabServiceStatus === "paused") {
+        alert("Your learning services are temporarily paused. Please contact the academy for assistance.");
+        return;
+      }
+      if (currentTabServiceStatus === "ended") {
+        alert("Your academy services have ended. Please contact the administrator if you believe this is an error.");
+        return;
+      }
+    }
     if (!note.pdfUrl) return;
     if (downloadingNoteId) return; // Prevent concurrent/duplicate downloads
     
@@ -1877,6 +1899,10 @@ export function StudentMyTab({
                   <button
                     onClick={() => {
                       if (!selectedSubject) return;
+                      if (!isAdmin && currentTabServiceStatus === "ended") {
+                        alert("Your academy services have ended. Please contact the administrator if you believe this is an error.");
+                        return;
+                      }
                       const allStudentAttempts = getStudentTestAttempts(localStudent.id || localStudent.name || "");
                       const rData = calculateSubjectTestProgress(selectedSubject, localStudent, allClassNotes, allStudentAttempts, isAdmin);
                       setReportModalData(rData);
@@ -2033,6 +2059,16 @@ export function StudentMyTab({
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      if (!isAdmin) {
+                                        if (currentTabServiceStatus === "paused") {
+                                          alert("Your learning services are temporarily paused. Please contact the academy for assistance.");
+                                          return;
+                                        }
+                                        if (currentTabServiceStatus === "ended") {
+                                          alert("Your academy services have ended. Please contact the administrator if you believe this is an error.");
+                                          return;
+                                        }
+                                      }
                                       setStudentTestTarget({
                                         classGrade: studentClass,
                                         subject: studentSubj,
@@ -2297,6 +2333,7 @@ export function StudentMyTab({
           chapterName={studentTestTarget.chapterName}
           topicName={studentTestTarget.topicName}
           testType={studentTestTarget.testType}
+          serviceStatus={localStudent.serviceStatus || localStudent.service_status}
         />
       )}
 
@@ -2586,9 +2623,27 @@ export default function StudentDashboard({
 
   const nextDueLabel = pendingMonths[0] || "No pending dues";
   const paidAcademicYearAmount = feeStats.paidCount * (student.monthlyFee || 0);
+  const currentServiceStatus = (student.serviceStatus || student.service_status || "active").toLowerCase();
 
   return (
     <div className="flex flex-col gap-3 overflow-x-hidden pb-6 animate-fadeIn" id="student-dashboard-root">
+      {currentServiceStatus === "paused" && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center gap-3 text-amber-800 dark:text-amber-300 shadow-xs" id="service-status-paused-banner">
+          <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-xs sm:text-sm font-bold leading-relaxed">
+            Your learning services are temporarily paused. Please contact the academy for assistance.
+          </p>
+        </div>
+      )}
+      {currentServiceStatus === "ended" && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-3 text-rose-800 dark:text-rose-300 shadow-xs" id="service-status-ended-banner">
+          <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 dark:text-rose-400" />
+          <p className="text-xs sm:text-sm font-bold leading-relaxed">
+            Your academy services have ended. Please contact the administrator if you believe this is an error.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">Personal Student Space</p>
@@ -2606,7 +2661,20 @@ export default function StudentDashboard({
         )}
       </div>
 
-      <HeroCard student={student} onOpenAvatarModal={onOpenAvatarModal} onOpenStudentDetails={() => setShowStudentDetailsModal(true)} formatDate={formatDate} onOpenAnnouncements={() => setShowAnnouncementsModal(true)} hasAnnouncements={hasNewAnnouncements} />
+      <HeroCard 
+        student={student} 
+        onOpenAvatarModal={onOpenAvatarModal} 
+        onOpenStudentDetails={() => setShowStudentDetailsModal(true)} 
+        formatDate={formatDate} 
+        onOpenAnnouncements={() => {
+          if (currentServiceStatus === "ended") {
+            alert("Your academy services have ended. Please contact the administrator if you believe this is an error.");
+            return;
+          }
+          setShowAnnouncementsModal(true);
+        }} 
+        hasAnnouncements={hasNewAnnouncements} 
+      />
 
       <div className="grid grid-cols-2 gap-2 sm:gap-4" id="fixed-student-tiles">
         <div className="min-w-0 h-full">

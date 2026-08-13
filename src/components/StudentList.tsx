@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Search, Edit2, Trash2, Plus, AlertCircle, Phone, Calendar } from "lucide-react";
-import { Student } from "../types";
+import { Search, Edit2, Trash2, Plus, AlertCircle, Phone, Calendar, ShieldCheck, CheckCircle2, PauseCircle, XCircle, X, Loader2 } from "lucide-react";
+import { Student, StudentServiceStatus } from "../types";
 import { getMonthsUpToCurrent } from "../utils/monthHelper";
 import StudentAvatar from "./StudentAvatar";
+import { updateStudentServiceStatus } from "../lib/firestoreService";
 
 interface StudentListProps {
   students: Student[];
@@ -12,6 +13,7 @@ interface StudentListProps {
   onEditStudent: (student: Student) => void;
   onDeleteStudent: (studentId: string) => void;
   onAddStudent: () => void;
+  onUpdateServiceStatus?: (studentId: string, status: StudentServiceStatus) => void;
 }
 
 // Utility to find overdue months
@@ -42,12 +44,41 @@ export default function StudentList({
   onSelectStudent,
   onEditStudent,
   onDeleteStudent,
-  onAddStudent
+  onAddStudent,
+  onUpdateServiceStatus
 }: StudentListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<string>("All");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
+  // Manage Services Modal State
+  const [selectedServiceStudent, setSelectedServiceStudent] = useState<Student | null>(null);
+  const [isSavingStatus, setIsSavingStatus] = useState<boolean>(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const handleStatusChange = async (newStatus: StudentServiceStatus) => {
+    if (!selectedServiceStudent) return;
+    setIsSavingStatus(true);
+    setSaveMessage(null);
+    try {
+      await updateStudentServiceStatus(selectedServiceStudent.id, newStatus);
+      const updated: Student = {
+        ...selectedServiceStudent,
+        serviceStatus: newStatus,
+        service_status: newStatus
+      };
+      setSelectedServiceStudent(updated);
+      if (onUpdateServiceStatus) {
+        onUpdateServiceStatus(selectedServiceStudent.id, newStatus);
+      }
+      setSaveMessage(`Service status updated to ${newStatus.toUpperCase()} in Supabase`);
+    } catch (err) {
+      setSaveMessage("Failed to update status in Supabase");
+    } finally {
+      setIsSavingStatus(false);
+    }
+  };
 
   // Synchronize filter prop changes (e.g. navigation from Dashboard cards)
   useEffect(() => {
@@ -217,9 +248,27 @@ export default function StudentList({
 
                   {/* Info details */}
                   <div className="flex flex-col">
-                    <span className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      {student.name}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800 dark:text-slate-100 text-sm sm:text-base group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        {student.name}
+                      </span>
+                      {/* Service status indicator tag */}
+                      {((student.serviceStatus || student.service_status) === "paused") && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-extrabold uppercase tracking-wider">
+                          🟡 Paused
+                        </span>
+                      )}
+                      {((student.serviceStatus || student.service_status) === "ended") && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-extrabold uppercase tracking-wider">
+                          🔴 Ended
+                        </span>
+                      )}
+                      {((student.serviceStatus || student.service_status) === "active" || !(student.serviceStatus || student.service_status)) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
+                          🟢 Active
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500">
                       <span>{student.classGrade}</span>
                       <span>•</span>
@@ -241,6 +290,20 @@ export default function StudentList({
                   className="flex items-center gap-2" 
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {/* Manage Services button */}
+                  <button
+                    onClick={() => {
+                      setSelectedServiceStudent(student);
+                      setSaveMessage(null);
+                    }}
+                    className="py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    id={`btn-manage-services-${student.id}`}
+                    title="Manage Student Services"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span className="hidden sm:inline">Manage Services</span>
+                  </button>
+
                   {/* Edit button */}
                   <button
                     onClick={() => onEditStudent(student)}
@@ -303,6 +366,160 @@ export default function StudentList({
       >
         <Plus className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
       </button>
+
+      {/* Manage Services Modal Dialog */}
+      {selectedServiceStudent && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={() => setSelectedServiceStudent(null)}
+          id="manage-services-modal-overlay"
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-800 relative space-y-5 animate-scaleIn"
+            onClick={(e) => e.stopPropagation()}
+            id="manage-services-modal"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-50 dark:bg-blue-950/50 rounded-2xl border border-blue-100 dark:border-blue-900/50">
+                  <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
+                    Manage Student Services
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {selectedServiceStudent.name} • Class {selectedServiceStudent.classGrade}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedServiceStudent(null)}
+                className="p-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition-all cursor-pointer"
+                id="btn-close-service-modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Save feedback banner */}
+            {saveMessage && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span>{saveMessage}</span>
+              </div>
+            )}
+
+            {/* Current Status Banner */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-500 dark:text-slate-400">Current Status:</span>
+              <span className={`font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border text-xs flex items-center gap-1.5 ${
+                (selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "paused"
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300 dark:border-amber-700"
+                  : (selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "ended"
+                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-300 dark:border-rose-700"
+                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+              }`}>
+                {(selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "paused" && "🟡 Paused"}
+                {(selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "ended" && "🔴 Ended"}
+                {((selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "active" || !(selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status)) && "🟢 Active"}
+              </span>
+            </div>
+
+            {/* Service Action Options */}
+            <div className="space-y-2.5">
+              <label className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Select Service Status</label>
+              
+              {/* 🟢 Active */}
+              <button
+                disabled={isSavingStatus}
+                onClick={() => handleStatusChange("active")}
+                className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                  (selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status || "active") === "active"
+                    ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-500 ring-2 ring-emerald-500/20"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300"
+                }`}
+                id="btn-status-active"
+              >
+                <span className="text-lg">🟢</span>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-sm text-slate-800 dark:text-slate-100">Active (Start Services)</span>
+                    {(selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status || "active") === "active" && (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Full access to study notes, practice tests, test scores, announcements, and all learning features.
+                  </p>
+                </div>
+              </button>
+
+              {/* 🟡 Paused */}
+              <button
+                disabled={isSavingStatus}
+                onClick={() => handleStatusChange("paused")}
+                className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                  (selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "paused"
+                    ? "bg-amber-50/60 dark:bg-amber-950/30 border-amber-500 ring-2 ring-amber-500/20"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300"
+                }`}
+                id="btn-status-paused"
+              >
+                <span className="text-lg">🟡</span>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-sm text-slate-800 dark:text-slate-100">Paused</span>
+                    {(selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "paused" && (
+                      <PauseCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Account remains valid with login & test scores history access, but notes and practice tests are blocked.
+                  </p>
+                </div>
+              </button>
+
+              {/* 🔴 Ended */}
+              <button
+                disabled={isSavingStatus}
+                onClick={() => handleStatusChange("ended")}
+                className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                  (selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "ended"
+                    ? "bg-rose-50/60 dark:bg-rose-950/30 border-rose-500 ring-2 ring-rose-500/20"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-rose-300"
+                }`}
+                id="btn-status-ended"
+              >
+                <span className="text-lg">🔴</span>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-sm text-slate-800 dark:text-slate-100">Ended</span>
+                    {(selectedServiceStudent.serviceStatus || selectedServiceStudent.service_status) === "ended" && (
+                      <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Permanently stops services. Blocks all learning features. Preserves student account, attendance & payment history.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Done Button */}
+            <div className="pt-2">
+              <button
+                onClick={() => setSelectedServiceStudent(null)}
+                className="w-full py-3 bg-slate-800 hover:bg-slate-900 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-2xl font-bold text-sm transition-all cursor-pointer shadow-xs"
+                id="btn-done-service-modal"
+              >
+                Close & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

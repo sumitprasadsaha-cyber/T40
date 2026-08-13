@@ -23,7 +23,8 @@ import {
   FileCheck,
   Award,
   BarChart2,
-  Calendar
+  Calendar,
+  AlertCircle
 } from "lucide-react";
 import { ChapterNote, Student, TestAttemptRecord } from "../types";
 import { uploadPdfToStorage, downloadFileFromStorage, sanitizeStoragePath, getBucketName } from "../lib/storageService";
@@ -175,6 +176,7 @@ interface SubjectNotesProps {
   enrolledSubjects?: string[];
   onSelectSubject?: (subject: string) => void;
   students?: Student[];
+  studentServiceStatus?: string;
 }
 
 export default function SubjectNotes({
@@ -191,7 +193,8 @@ export default function SubjectNotes({
   isAdmin = true,
   enrolledSubjects = [],
   onSelectSubject,
-  students = []
+  students = [],
+  studentServiceStatus
 }: SubjectNotesProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [chapterNo, setChapterNo] = useState<number | "">("");
@@ -338,7 +341,26 @@ export default function SubjectNotes({
     });
   };
 
+  const targetStud = students?.find((s) => s.id === studentId || (s.name && studentName && s.name.toLowerCase() === studentName.toLowerCase()));
+  const currentServiceStatus = (
+    studentServiceStatus ||
+    targetStud?.serviceStatus ||
+    targetStud?.service_status ||
+    "active"
+  ).toLowerCase();
+
   const handlePreviewPdf = (note: ChapterNote) => {
+    if (!isAdmin) {
+      if (currentServiceStatus === "paused") {
+        alert("Your learning services are temporarily paused. Please contact the academy for assistance.");
+        return;
+      }
+      if (currentServiceStatus === "ended") {
+        alert("Your academy services have ended. Please contact the administrator if you believe this is an error.");
+        return;
+      }
+    }
+
     // Security check: verify student permission before previewing
     if (!isAdmin && !isNoteAccessibleToStudent(note, studentId, false)) {
       alert("Access Denied: You do not have permission to view this chapter note.");
@@ -519,6 +541,23 @@ export default function SubjectNotes({
           </h1>
         </div>
       </div>
+
+      {!isAdmin && currentServiceStatus === "paused" && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center gap-3 text-amber-800 dark:text-amber-300 shadow-xs mb-1" id="subject-notes-paused-banner">
+          <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <p className="text-xs sm:text-sm font-bold leading-relaxed">
+            Your learning services are temporarily paused. Please contact the academy for assistance.
+          </p>
+        </div>
+      )}
+      {!isAdmin && currentServiceStatus === "ended" && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex items-center gap-3 text-rose-800 dark:text-rose-300 shadow-xs mb-1" id="subject-notes-ended-banner">
+          <AlertCircle className="w-5 h-5 shrink-0 text-rose-600 dark:text-rose-400" />
+          <p className="text-xs sm:text-sm font-bold leading-relaxed">
+            Your academy services have ended. Please contact the administrator if you believe this is an error.
+          </p>
+        </div>
+      )}
 
       {/* Two-Panel Responsive Grid */}
       <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start" id="notes-two-panel-container">
@@ -1358,6 +1397,7 @@ export default function SubjectNotes({
           chapterName={studentTestTarget.chapterName}
           topicName={studentTestTarget.topicName}
           testType={studentTestTarget.testType}
+          serviceStatus={currentServiceStatus}
         />
       )}
 

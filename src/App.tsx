@@ -33,7 +33,8 @@ import {
   updateStudentPresence,
   markStudentOffline,
   subscribeToTestAttempts,
-  verifyUserRoleFromDatabase
+  verifyUserRoleFromDatabase,
+  fetchStudentServiceStatus
 } from "./lib/firestoreService";
 import { migrateLegacyNotesToClassNotes } from "./utils/classNoteHelper";
 import { deleteFileFromStorage, uploadProfilePhoto } from "./lib/storageService";
@@ -186,6 +187,27 @@ export default function App() {
       return () => {
         if (unsubscribe) unsubscribe();
       };
+    }
+  }, [auth.isAuthenticated, auth.role, auth.loggedInStudentId]);
+
+  // Immediately fetch student's service status directly from Supabase after login (never use cached values)
+  useEffect(() => {
+    if (auth.isAuthenticated && auth.role === "student" && auth.loggedInStudentId) {
+      const studentId = auth.loggedInStudentId;
+      fetchStudentServiceStatus(studentId).then((latestStatus) => {
+        setStudents((prev) => {
+          return prev.map((s) => {
+            if (s.id === studentId) {
+              return {
+                ...s,
+                serviceStatus: latestStatus,
+                service_status: latestStatus,
+              };
+            }
+            return s;
+          });
+        });
+      });
     }
   }, [auth.isAuthenticated, auth.role, auth.loggedInStudentId]);
 
@@ -1345,6 +1367,11 @@ export default function App() {
               onEditStudent={handleTriggerEdit}
               onDeleteStudent={handleDeleteStudent}
               onAddStudent={handleTriggerAdd}
+              onUpdateServiceStatus={(studentId, newStatus) => {
+                setStudents((prev) =>
+                  prev.map((s) => (s.id === studentId ? { ...s, serviceStatus: newStatus, service_status: newStatus } : s))
+                );
+              }}
             />
           )}
 

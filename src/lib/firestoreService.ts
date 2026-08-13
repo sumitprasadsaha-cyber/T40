@@ -1704,4 +1704,122 @@ export function cleanupAllFirestoreListeners(): void {
   console.log("[FirestoreService] All listeners cleaned up");
 }
 
+/**
+ * Update student service status in database (Supabase, Firestore, local cache)
+ */
+export async function updateStudentServiceStatus(
+  studentId: string,
+  status: "active" | "paused" | "ended"
+): Promise<boolean> {
+  if (!studentId || typeof studentId !== "string") return false;
+
+  const newStatus: "active" | "paused" | "ended" = status || "active";
+
+  // 1. Update Local Storage Cache
+  try {
+    const students = getLocalStudents();
+    const idx = students.findIndex((s) => s.id === studentId);
+    if (idx > -1) {
+      students[idx] = {
+        ...students[idx],
+        serviceStatus: newStatus,
+        service_status: newStatus
+      };
+      saveLocalStudents(students);
+    }
+  } catch (err) {
+    console.warn("[StudentServiceStatus] Error updating local students cache:", err);
+  }
+
+  // 2. Update Firestore Document
+  try {
+    const db = await getFirebaseDb();
+    if (db) {
+      const studentDocRef = doc(db, "students", studentId);
+      await setDoc(studentDocRef, { serviceStatus: newStatus, service_status: newStatus }, { merge: true });
+    }
+  } catch (err) {
+    console.warn("[StudentServiceStatus] Error updating Firestore service status:", err);
+  }
+
+  // 3. Update Supabase Database Table
+  try {
+    const { supabase } = await import("./supabaseClient");
+    if (supabase) {
+      const { error } = await supabase
+        .from("students")
+        .upsert({ id: studentId, service_status: newStatus, updated_at: new Date().toISOString() }, { onConflict: "id" });
+      if (error) {
+        console.warn("[StudentServiceStatus] Supabase service_status upsert warning:", error.message);
+      }
+    }
+  } catch (err) {
+    console.warn("[StudentServiceStatus] Error syncing to Supabase table:", err);
+  }
+
+  return true;
+}
+
+/**
+ * Fetch latest student service status directly from database
+ */
+export async function fetchStudentServiceStatus(
+  studentId: string
+): Promise<"active" | "paused" | "ended"> {
+  if (!studentId || typeof studentId !== "string") return "active";
+
+  // 1. Attempt fetching from Supabase table first
+  try {
+    const { supabase } = await import("./supabaseClient");
+    if (supabase) {
+      const { data, error } = await supabase
+        .from("students")
+        .select("service_status")
+        .eq("id", studentId)
+        .maybeSingle();
+
+      if (!error && data && data.service_status) {
+        const val = String(data.service_status).toLowerCase();
+        if (val === "paused" || val === "ended" || val === "active") {
+          return val as "active" | "paused" | "ended";
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[StudentServiceStatus] Error reading from Supabase:", err);
+  }
+
+  // 2. Fallback to Firestore
+  try {
+    const db = await getFirebaseDb();
+    if (db) {
+      const studentDocRef = doc(db, "students", studentId);
+      const snap = await getDoc(studentDocRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        const val = String(data?.service_status || data?.serviceStatus || "").toLowerCase();
+        if (val === "paused" || val === "ended" || val === "active") {
+          return val as "active" | "paused" | "ended";
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[StudentServiceStatus] Error reading from Firestore:", err);
+  }
+
+  // 3. Fallback to local storage cache
+  try {
+    const students = getLocalStudents();
+    const found = students.find((s) => s.id === studentId);
+    if (found) {
+      const val = String(found.service_status || found.serviceStatus || "").toLowerCase();
+      if (val === "paused" || val === "ended" || val === "active") {
+        return val as "active" | "paused" | "ended";
+      }
+    }
+  } catch (err) {}
+
+  return "active";
+}
+
 

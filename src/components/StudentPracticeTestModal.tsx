@@ -45,6 +45,7 @@ interface StudentPracticeTestModalProps {
   chapterName: string;
   topicName: string; // Specific topic name OR "Full Chapter Test"
   testType: "topic" | "full_chapter";
+  serviceStatus?: string;
 }
 
 export default function StudentPracticeTestModal({
@@ -57,8 +58,54 @@ export default function StudentPracticeTestModal({
   chapterNo,
   chapterName,
   topicName,
-  testType
+  testType,
+  serviceStatus
 }: StudentPracticeTestModalProps) {
+  const normStatus = String(serviceStatus || "").toLowerCase();
+
+  if (normStatus === "paused") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+        <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 max-w-md w-full shadow-2xl text-center flex flex-col items-center">
+          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4">
+            <XCircle className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-2">Services Paused</h3>
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+            Your learning services are temporarily paused. Please contact the academy for assistance.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (normStatus === "ended") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+        <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 rounded-2xl p-6 max-w-md w-full shadow-2xl text-center flex flex-col items-center">
+          <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950 flex items-center justify-center text-rose-600 dark:text-rose-400 mb-4">
+            <XCircle className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-2">Services Ended</h3>
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+            Your academy services have ended. Please contact the administrator if you believe this is an error.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
   // Test State
   const [questions, setQuestions] = useState<ParsedAssessmentQuestion[]>([]);
   const [testStage, setTestStage] = useState<"intro" | "active" | "result">("intro");

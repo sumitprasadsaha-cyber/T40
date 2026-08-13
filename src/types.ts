@@ -103,6 +103,8 @@ export interface StudyMaterialUsageRecord {
   totalChapters: number;
 }
 
+export type StudentServiceStatus = "active" | "paused" | "ended";
+
 export interface Student {
   id: string;
   uid?: string; // Firebase Auth UID for deleting account
@@ -130,6 +132,8 @@ export interface Student {
   reports?: StudentReport[];
   chapterProgress?: Record<string, ChapterProgressData>; // key: `${subjectId}_${chapterId}` or `${chapterId}`
   lastActiveAt?: string; // ISO timestamp of last app activity
+  serviceStatus?: StudentServiceStatus; // "active" | "paused" | "ended"
+  service_status?: StudentServiceStatus; // Supabase column mapping
   
   // AI Analysis additional dimensions
   testMarks?: TestMarkRecord[];
